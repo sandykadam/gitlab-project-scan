@@ -17,3 +17,7 @@ The goal of this repository is to provide a simple reference implementation that
 
 ![Screenshot of single stage to show all security scans.](./gitlab-scans-in-single-stage.png)
 
+## Screenshot of vulnerability report after successful scan
+
+![Screenshot of vulnerability report after successful scan.](./gitlab-scan-vulnerability-report.jpg)
+
