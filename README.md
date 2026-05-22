@@ -11,4 +11,9 @@ Included security scanning features:
 * **Secret Detection** – Scans for accidentally exposed credentials, API keys, tokens, and sensitive information.
 * **Container Scanning** – Checks container images for known vulnerabilities and insecure packages.
 
-The goal of this repository is to provide a simple reference implementation that teams can use to understand, enable, and adopt GitLab-native security scanning across their projects.
+The goal of this repository is to provide a simple reference implementation that teams can use to understand, enable, and adopt GitLab-native security scanning across their projects. Also on how to implement scans under single stage by overriding default "test" stage for meaningful pipeline.
+
+## Screenshot of single stage to show all security scans
+
+![Screenshot of single stage to show all security scans.](./gitlab-scans-in-single-stage.png)
+
