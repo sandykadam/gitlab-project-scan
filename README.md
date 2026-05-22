@@ -2,7 +2,7 @@
 
 Security scanning for GitLab projects.
 
-This repository is a demo project that showcases how to enable and configure GitLab's built-in security scanning capabilities within your projects. It demonstrates integrating automated security checks directly into CI/CD pipelines to identify vulnerabilities and security risks early in the development lifecycle.
+This repository is a demo project that showcases how to enable and configure GitLab's built-in security scanning capabilities within your projects. It demonstrates integrating automated security checks directly into CI/CD pipelines to identify vulnerabilities and security risks early in the development lifecycle. Important is how to bring all scanning in one stage by overriding default "test" stage of Gitlab.
 
 Included security scanning features:
 
