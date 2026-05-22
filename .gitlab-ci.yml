@@ -1,0 +1,150 @@
+variables:
+  # set secrets in Settings -> Pipelines -> Secret Variables
+  GIT_SUBMODULE_STRATEGY: recursive
+  DOCKER_DRIVER: overlay2
+  GIT_STRATEGY: fetch
+  # Dependency scanning
+  DS_EXCLUDED_PATHS: ".git, vendor/bundle, node_modules"
+  # SAST + IaC scanning
+  SAST_EXCLUDED_PATHS: "node_modules, vendor, .git, dist, build, public/core, public/modules/contrib"
+  # Clean up naming constraints by using native GitLab CI predefined variables where possible
+  DOCKER_PROJECT_NAME: "${CI_PROJECT_NAME}"
+  IMAGE_NGINX: "$CI_REGISTRY/$CI_PROJECT_PATH:$DOCKER_PROJECT_NAME-nginx-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_ID"     # Tag for NGINX image
+  IMAGE_PHP_FPM: "$CI_REGISTRY/$CI_PROJECT_PATH:$DOCKER_PROJECT_NAME-php-fpm-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_ID" # Tag for PHP-FPM image
+
+# Note: Security scanning jobs are defined in the included templates and extended below with specific variables and rules
+include:
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml # Updated to the standard, stable template reference
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
+
+stages:
+  - build
+  - test
+  - security-scan        # ← new: all security scanning runs here, after build
+  - deploy
+
+####################################
+# GLOBAL TEMPLATE FOR WORKFLOW RULES
+####################################
+.security_scan_rules:
+  stage: security-scan  # Forces extended jobs into your custom stage globally
+  before_script: [] # CRUCIAL: Wipes out any global or inherited before_script crashes inside minimal scanner containers
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+  allow_failure: true # Optional: Don't fail the pipeline on security scan issues, but still report them
+
+####################################
+# SECURITY SCANNING OVERRIDES
+####################################
+
+# We use multi-inheritance arrays [template_job, rule_set] so we don't
+# overwrite the internal script properties defined by GitLab's core templates.
+
+# Global adjustments for included templates:
+semgrep-sast:
+  extends:
+    - .sast-analyzer
+    - .security_scan_rules
+
+gemnasium-dependency_scanning:
+  extends:
+    - .ds-analyzer
+    - .security_scan_rules
+
+secret_detection:
+  stage: security-scan
+  before_script: [] # Keep this to preserve container stability
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+
+kics-iac-sast:
+  extends: 
+    - iac-sast
+    - .security_scan_rules
+
+# Note: Disable the default, unconfigured container scanning job to stop duplication
+container_scanning:
+  rules:
+    - when: never
+
+php_container_scanning:
+  extends: [container_scanning, .security_scan_rules]
+  stage: security-scan
+  needs: [build_dev]
+  variables:
+    CS_IMAGE: "$IMAGE_PHP_FPM"
+    CS_SEVERITY_THRESHOLD: "HIGH"
+    CS_REGISTRY_USER: "gitlab-ci-token"
+    CS_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+
+nginx_container_scanning:
+  extends: [container_scanning, .security_scan_rules]  
+  stage: security-scan
+  needs: [build_dev]
+  variables:
+    CS_IMAGE: "$IMAGE_NGINX"
+    CS_SEVERITY_THRESHOLD: "HIGH"
+    CS_REGISTRY_USER: "gitlab-ci-token"
+    CS_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+
+
+####################################
+# BUILD
+####################################
+.template_build: &build
+  stage: build
+  tags: [dind] # Docker-in-Docker runner
+  script:
+    - echo "Building images with the following variables:"
+    - echo "IMAGE_PHP_FPM - $IMAGE_PHP_FPM"
+    - echo "IMAGE_NGINX - $IMAGE_NGINX"
+    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin $CI_REGISTRY # Authenticate to Docker registry using token
+    - docker build -t $IMAGE_PHP_FPM --build-arg ENV=$ENVIRONMENT -f Dockerfile_php . # Build PHP-FPM image
+    - docker build -t $IMAGE_NGINX --build-arg ENV=$ENVIRONMENT -f Dockerfile_nginx . # Build NGINX image
+    - docker push $IMAGE_PHP_FPM # Push PHP-FPM image
+    - docker push $IMAGE_NGINX   # Push NGINX image
+
+build_dev:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master"' # Only run on dev branch
+  variables:
+    ENVIRONMENT: dev
+  <<: *build
+
+build_prod:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_TAG' # Only run on tag (production)
+  variables:
+    ENVIRONMENT: prod
+  <<: *build
+
+####################################
+# DEPLOY
+####################################
+
+dev_deploy:
+  stage: deploy
+  script:
+    - echo "=================================="
+    - echo "Dummy Deployment Started"
+    - echo "Project: $CI_PROJECT_NAME"
+    - echo "Branch: $CI_COMMIT_REF_NAME"
+    - echo "Pipeline: $CI_PIPELINE_ID"
+    - echo "Commit: $CI_COMMIT_SHORT_SHA"
+    - echo "=================================="
+    - sleep 5
+    - echo "Simulating deployment..."
+    - sleep 5
+    - echo "Application deployed successfully"
+    - echo "=================================="
+  environment:
+    name: demo
+    url: https://demo.example.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
