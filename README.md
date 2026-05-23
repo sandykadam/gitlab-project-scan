@@ -1,4 +1,4 @@
-# gitlab-project-scan
+# gitlab-project-security-scan
 
 Security scanning for GitLab projects.
 
